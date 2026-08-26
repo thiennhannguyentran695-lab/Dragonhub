@@ -1,0 +1,328 @@
+-- Blox Fruits-style Auto System
+-- Dùng cho game của bạn trong Roblox Studio
+
+local Players = game:GetService("Players")
+
+-- =========================
+-- CONFIG
+-- =========================
+
+local START_MONEY = 5000
+local AUTO_COLLECT_DISTANCE = 80
+local AUTO_FARM_DISTANCE = 60
+local FARM_DAMAGE = 25
+local FARM_INTERVAL = 0.5
+
+-- =========================
+-- PLAYER DATA
+-- =========================
+
+local function setupPlayer(player)
+
+	if player:FindFirstChild("leaderstats") then
+		return
+	end
+
+	local leaderstats = Instance.new("Folder")
+	leaderstats.Name = "leaderstats"
+	leaderstats.Parent = player
+
+	local money = Instance.new("IntValue")
+	money.Name = "Money"
+	money.Value = START_MONEY
+	money.Parent = leaderstats
+
+	local level = Instance.new("IntValue")
+	level.Name = "Level"
+	level.Value = 1
+	level.Parent = leaderstats
+
+	local inventory = Instance.new("Folder")
+	inventory.Name = "Inventory"
+	inventory.Parent = player
+
+	local autoFarm = Instance.new("BoolValue")
+	autoFarm.Name = "AutoFarm"
+	autoFarm.Value = false
+	autoFarm.Parent = player
+
+	local autoCollect = Instance.new("BoolValue")
+	autoCollect.Name = "AutoCollect"
+	autoCollect.Value = false
+	autoCollect.Parent = player
+
+	local autoBuy = Instance.new("BoolValue")
+	autoBuy.Name = "AutoBuy"
+	autoBuy.Value = false
+	autoBuy.Parent = player
+end
+
+Players.PlayerAdded:Connect(setupPlayer)
+
+for _, player in ipairs(Players:GetPlayers()) do
+	setupPlayer(player)
+end
+
+-- =========================
+-- HELPER
+-- =========================
+
+local function getRoot(character)
+	return character and character:FindFirstChild("HumanoidRootPart")
+end
+
+local function getNearestNPC(position)
+
+	local enemiesFolder = workspace:FindFirstChild("Enemies")
+
+	if not enemiesFolder then
+		return nil
+	end
+
+	local nearest = nil
+	local shortest = math.huge
+
+	for _, npc in ipairs(enemiesFolder:GetChildren()) do
+
+		local humanoid = npc:FindFirstChildOfClass("Humanoid")
+		local root = getRoot(npc)
+
+		if humanoid and root and humanoid.Health > 0 then
+
+			local distance = (root.Position - position).Magnitude
+
+			if distance < shortest then
+				shortest = distance
+				nearest = npc
+			end
+		end
+	end
+
+	return nearest
+end
+
+-- =========================
+-- AUTO FARM
+-- =========================
+
+task.spawn(function()
+
+	while true do
+
+		for _, player in ipairs(Players:GetPlayers()) do
+
+			local autoFarm = player:FindFirstChild("AutoFarm")
+			local character = player.Character
+
+			if autoFarm and autoFarm.Value and character then
+
+				local playerRoot = getRoot(character)
+
+				if playerRoot then
+
+					local npc = getNearestNPC(playerRoot.Position)
+
+					if npc then
+
+						local npcRoot = getRoot(npc)
+						local humanoid = npc:FindFirstChildOfClass("Humanoid")
+
+						if npcRoot and humanoid then
+
+							-- Menempatkan player dekat NPC
+							playerRoot.CFrame =
+								npcRoot.CFrame * CFrame.new(0, 0, 5)
+
+							-- Memberikan damage
+							humanoid:TakeDamage(FARM_DAMAGE)
+
+							if humanoid.Health <= 0 then
+
+								local stats =
+									player:FindFirstChild("leaderstats")
+
+								if stats then
+
+									local money =
+										stats:FindFirstChild("Money")
+
+									local level =
+										stats:FindFirstChild("Level")
+
+									if money then
+										money.Value += 100
+									end
+
+									if level then
+										level.Value += 1
+									end
+
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+
+		task.wait(FARM_INTERVAL)
+	end
+end)
+
+-- =========================
+-- AUTO COLLECT ITEM
+-- =========================
+
+task.spawn(function()
+
+	while true do
+
+		for _, player in ipairs(Players:GetPlayers()) do
+
+			local autoCollect =
+				player:FindFirstChild("AutoCollect")
+
+			local character = player.Character
+
+			if autoCollect and autoCollect.Value and character then
+
+				local root = getRoot(character)
+
+				if root then
+
+					local itemsFolder =
+						workspace:FindFirstChild("Items")
+
+					if itemsFolder then
+
+						for _, item in ipairs(itemsFolder:GetChildren()) do
+
+							local itemRoot =
+								item:IsA("BasePart")
+								and item
+								or item:FindFirstChildWhichIsA(
+									"BasePart",
+									true
+								)
+
+							if itemRoot then
+
+								local distance =
+									(itemRoot.Position -
+									root.Position).Magnitude
+
+								if distance <= AUTO_COLLECT_DISTANCE then
+
+									local inventory =
+										player:FindFirstChild("Inventory")
+
+									if inventory then
+
+										local owned =
+											inventory:FindFirstChild(
+												item.Name
+											)
+
+										if not owned then
+
+											owned =
+												Instance.new(
+													"IntValue"
+												)
+
+											owned.Name =
+												item.Name
+
+											owned.Value = 0
+											owned.Parent =
+												inventory
+										end
+
+										owned.Value += 1
+									end
+
+									item:Destroy()
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+
+		task.wait(0.25)
+	end
+end)
+
+-- =========================
+-- AUTO BUY
+-- =========================
+
+local SHOP = {
+	["Sword"] = 1000,
+	["Gun"] = 2500,
+	["Fruit"] = 5000,
+	["Boat"] = 7500
+}
+
+local function buyItem(player, itemName)
+
+	local price = SHOP[itemName]
+
+	if not price then
+		return false
+	end
+
+	local stats = player:FindFirstChild("leaderstats")
+	local inventory = player:FindFirstChild("Inventory")
+
+	if not stats or not inventory then
+		return false
+	end
+
+	local money = stats:FindFirstChild("Money")
+
+	if not money or money.Value < price then
+		return false
+	end
+
+	money.Value -= price
+
+	local item = inventory:FindFirstChild(itemName)
+
+	if not item then
+
+		item = Instance.new("IntValue")
+		item.Name = itemName
+		item.Value = 0
+		item.Parent = inventory
+
+	end
+
+	item.Value += 1
+
+	return true
+end
+
+task.spawn(function()
+
+	while true do
+
+		for _, player in ipairs(Players:GetPlayers()) do
+
+			local autoBuy =
+				player:FindFirstChild("AutoBuy")
+
+			if autoBuy and autoBuy.Value then
+
+				-- Tự mua Fruit nếu đủ tiền
+				buyItem(player, "Fruit")
+
+			end
+		end
+
+		task.wait(10)
+	end
+end)
+
+print("Blox Fruits-style system loaded!")
